@@ -1,6 +1,6 @@
 # =========================================================
 # PROJETO: Modelagem de Dados Não Estruturados - Etapa 1
-# TEMA: Análise de Repercussão do Caso Elize Matsunaga
+# TEMA: Análise do Caso Elize Matsunaga
 #
 # INTEGRANTES DO GRUPO:
 # 1. Bianca Lavine
@@ -138,4 +138,5 @@ if __name__ == "__main__":
     # Processamento iterativo
     for comentario in comentarios_reddit:
         analisar_comentario(comentario)
+
 
