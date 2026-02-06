@@ -1,3 +1,15 @@
+# =========================================================
+# PROJETO: Modelagem de Dados Não Estruturados - Etapa 1
+# TEMA: Análise de Repercussão do Caso Elize Matsunaga
+#
+# INTEGRANTES DO GRUPO:
+# 1. Bianca Lavine
+# 2. Letícia Braz
+# 3. Kaio Vitor
+#
+# PROFESSORA: Adriana Carla Damasceno
+# =========================================================
+
 import re
 import spacy
 from spacy.language import Language
@@ -126,3 +138,4 @@ if __name__ == "__main__":
     # Processamento iterativo
     for comentario in comentarios_reddit:
         analisar_comentario(comentario)
+
