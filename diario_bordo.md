@@ -1,4 +1,4 @@
-### **DIÁRIO DE BORDO: DESAFIOS E SOLUÇÕES**
+# DIÁRIO DE BORDO: ETAPA 1 (DESAFIOS E SOLUÇÕES) 
 
 **1. Insuficiência do Modelo *Small***
 
