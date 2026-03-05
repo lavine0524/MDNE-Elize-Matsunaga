@@ -27,21 +27,19 @@
 2. **Ambiguidades** ("Vi"  `MISC`) causadas por emojis/informalidade, resolvidas com filtros.
 3. **Preservação de Dados** (Manter texto de `@` e `#`) para enriquecer a análise.
 
-# DIÁRIO DE BORDO: ETAPA 2 (COLETA E SANITIZAÇÃO)
 
----
+# DIÁRIO DE BORDO: DESAFIOS E SOLUÇÕES (ETAPA 2)
 
-## 4. Dificuldade de Acesso à API Oficial (OAuth2)
-* **Problema:** O formulário de desenvolvedor do Reddit apresentou falhas silenciosas de validação (cache e erros de nome), impedindo a criação das chaves de acesso (Client ID/Secret).
-* **Erro:** O botão "create app" não processava a requisição, travando o fluxo de autenticação via biblioteca PRAW.
-* **Solução:** Implementação de uma abordagem de coleta alternativa via **Endpoint JSON Público** do Reddit. Utilizamos a biblioteca `requests` para capturar os dados brutos sem a necessidade de tokens, garantindo a agilidade da Etapa 2.
+###  Problemas Técnicos Resolvidos
+1. **Instabilidade na API Oficial (OAuth2):** O portal de desenvolvedores do Reddit apresentou falhas na geração de chaves.
+   * **Solução:** Migração para ingestão via **Endpoint JSON Público**, garantindo a coleta sem travas de autenticação.
+2. **Resíduos de Formatação Invisível:** Identificamos entidades HTML (`&amp;`) e caracteres Unicode (`\u200b`) que o Regex comum não limpava.
+   * **Solução:** Integração da biblioteca `html.unescape` e filtros de string para normalização completa do texto.
+3. **Ambiguidade no NER:** O modelo estatístico `lg` confundia nomes próprios isolados (ex: "Suzane") com organizações.
+   * **Solução:** Implementação de um **EntityRuler** para forçar padrões fixos de reconhecimento de personagens e locais.
 
-## 5. Ruídos de Formatação HTML e Unicode
-* **Problema:** Os dados extraídos continham "lixo" de formatação invisível e entidades HTML codificadas que poluíam o corpus.
-* **Erro:** Presença recorrente de sequências como `&amp;x200B;` (Zero Width Space) no texto limpo, que o Regex de pontuação comum não capturava.
-* **Solução:** Integração da biblioteca nativa `html` para decodificação de entidades (`html.unescape`) e refatoração da função de limpeza para remover especificamente caracteres Unicode (`\u200b`).
-
-## 6. Ambiguidade em Dados Bilíngues
-* **Problema:** A busca global pelo tema trazia resultados em inglês, causando "alucinações" no modelo spaCy de Língua Portuguesa.
-* **Erro:** Expressões genéricas (ex: "Has anyone") eram erroneamente classificadas como entidades MISC ou PER devido à capitalização.
-* **Solução:** Refinamento da **Query de busca** com palavras-chave exclusivas do contexto brasileiro (*"documentário"*, *"solta"*, *"regime"*) para forçar um corpus em português e aumentar a precisão do NER.
+###  Melhorias de Engenharia de Dados
+4. **Resiliência de Conexão:** Risco de bloqueio por "Too Many Requests".
+   * **Solução:** Implementação de um **User-Agent** personalizado e tratamento de exceções com `raise_for_status()`.
+5. **Estruturação para Análise:** Dados "soltos" no terminal dificultam estudos posteriores.
+   * **Solução:** Integração com a biblioteca **Pandas** para exportação tabular em CSV, permitindo a persistência dos dados.
