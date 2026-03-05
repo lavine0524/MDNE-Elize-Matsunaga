@@ -13,48 +13,32 @@
 import html
 import re
 import spacy
-from spacy.language import Language
 import requests
+import pandas as pd
 
-
-# 1. PRÉ-COMPILAÇÃO DE REGEX (OTIMIZAÇÃO DE PERFORMANCE)
-# Compilamos os padrões aqui para não recriá-los a cada frase (muito mais rápido)
+#PRÉ-COMPILAÇÃO DE REGEX (OTIMIZADO)
 RE_URL = re.compile(r'https?://\S+|www\.\S+')
-# Risadas: kkk, rsrs, hahaha, huahua (independente de maiúsculas)
-RE_RISADAS = re.compile(r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+|lol|lmao|lmfao)\b')
-# Pontuação repetida: "!!!!" vira "!"
+RE_RISADAS = re.compile(
+    r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+|lol|lmao|lmfao)\b')
 RE_PONTUACAO = re.compile(r'([!?,.])\1+')
-# Espaços múltiplos
 RE_ESPACOS = re.compile(r'\s+')
-# Entidades HTML (como &amp;x200B;, &quot;, etc.)
-RE_HTML = re.compile(r'&[a-z0-9#]+;')
 
-
-
-# 2. CARREGAMENTO DO MODELO SPACY
+#2. CARREGAMENTO DO MODELO SPACY
 print("Carregando modelo de linguagem... (Aguarde)")
-
 try:
-    # Prioridade: Modelo Large (Mais inteligente)
     nlp = spacy.load("pt_core_news_lg")
 except OSError:
-    print("⚠️  AVISO: Modelo 'pt_core_news_lg' não encontrado.")
-    print("   Tentando carregar o modelo 'sm' (backup)...")
+    print("⚠️  AVISO: Modelo 'pt_core_news_lg' não encontrado. Tentando 'sm'...")
     try:
         nlp = spacy.load("pt_core_news_sm")
     except:
         print("❌ ERRO CRÍTICO: Nenhum modelo spaCy encontrado.")
-        print("   Execute no terminal: python -m spacy download pt_core_news_lg")
         exit()
 
-
-# 3. PERSONALIZAÇÃO (ENTITY RULER)
-# Regras manuais para corrigir falhas de interpretação em textos curtos
+#3. PERSONALIZAÇÃO (ENTITY RULER)
 if not nlp.has_pipe("entity_ruler"):
     ruler = nlp.add_pipe("entity_ruler", before="ner")
-
     padroes = [
-        # --- GABARITO (O que deve ser identificado) ---
         {"label": "PER", "pattern": "Elize Matsunaga"},
         {"label": "PER", "pattern": "Elize"},
         {"label": "LOC", "pattern": "Tremembé"},
@@ -66,107 +50,110 @@ if not nlp.has_pipe("entity_ruler"):
         {"label": "PER", "pattern": "Marcos"},
         {"label": "PER", "pattern": "Suzane von Richthofen"},
         {"label": "MISC", "pattern": "Era Uma Vez Um Crime"},
-
-        # --- FILTRO (O que deve ser ignorado) ---
-        # Palavras comuns que o modelo confunde com nomes próprios
-        {"label": "IGNORAR", "pattern": "Vi"},
-        {"label": "IGNORAR", "pattern": "Acho"},
-        {"label": "IGNORAR", "pattern": "Gente"},
-        {"label": "IGNORAR", "pattern": "Olha"},
+        {"label": "IGNORAR", "pattern": [
+            {"LOWER": {"IN": ["vi", "acho", "gente", "olha"]}}]}
     ]
     ruler.add_patterns(padroes)
 
-
-# 4. FUNÇÕES DE LIMPEZA E ANÁLISE
+#4. FUNÇÕES DE LIMPEZA E EXTRAÇÃO (NLP)
 def limpar_texto(texto_bruto):
-    """
-    Limpa o texto preservando Emojis e tratando ruídos de redes sociais.
-    """
-    # Usamos o módulo html
+    if not texto_bruto:
+        return ""
     texto = html.unescape(texto_bruto)
-    
-    # 2. Remove resíduos específicos de espaços invisíveis Unicode
     texto = texto.replace('\u200b', '').replace('#x200B', '')
-
-    # 3. Remove URLs usando o regex compilado
     texto = RE_URL.sub('', texto)
-
-    # 4. Limpeza de Menções (@) e Hashtags (#)
     texto = texto.replace('@', '').replace('#', '')
-
-    # 5. Remove risadas (kkk, lol, etc.)
     texto = RE_RISADAS.sub('', texto)
-
-    # 6. Normaliza pontuação (!!!! -> !)
     texto = RE_PONTUACAO.sub(r'\1', texto)
-
-    # 7. Remove espaços extras e quebras de linha (Finalização)
     texto = RE_ESPACOS.sub(' ', texto).strip()
-
     return texto
 
 
-def analisar_comentario(comentario_original):
-    # Passo A: Limpeza Otimizada
+def processar_comentario(comentario_original):
     texto_limpo = limpar_texto(comentario_original)
+    if not texto_limpo or len(texto_limpo) < 5:
+        return None
 
-    # Passo B: Processamento NLP
     doc = nlp(texto_limpo)
 
-    # Exibição dos Resultados
-    print(f"\n{'='*60}")
-    print(f"📝 ORIGINAL: {comentario_original}")
-    print(f"🧹 LIMPO:    {texto_limpo}")
-    print(f"{'-'*60}")
-    print("🔍 ENTIDADES DETECTADAS:")
+    entidades = [ent.text for ent in doc.ents if ent.label_ != "IGNORAR"]
+    adjetivos = [token.text.lower() for token in doc if token.pos_ == "ADJ"]
+    substantivos = [token.text.lower()
+                    for token in doc if token.pos_ == "NOUN"]
 
-    encontrou_algo = False
-    for ent in doc.ents:
-        # Pula entidades marcadas na lista negra
-        if ent.label_ == "IGNORAR":
-            continue
+    return {
+        "texto_original": comentario_original,
+        "texto_limpo": texto_limpo,
+        "entidades": ", ".join(entidades),
+        "adjetivos": ", ".join(adjetivos),
+        "substantivos": ", ".join(substantivos)
+    }
 
-        encontrou_algo = True
-        print(f"   • {ent.text:<20} | Tipo: {ent.label_}")
-
-    if not encontrou_algo:
-        print("   (Nenhuma entidade relevante encontrada)")
-    print(f"{'='*60}")
-
-
-def coletar_dados_sem_api(termo_busca, limite=5):
-    print(f"\n--- Coletando dados reais (Via JSON Publico) sobre: {termo_busca} ---")
-    
-    # URL de busca do Reddit em formato JSON
+#5. COLETA DE DADOS VIA JSON
+def coletar_dados_sem_api(termo_busca, limite=15):
+    print(f"\n--- Coletando dados no r/brasil sobre: '{termo_busca}' ---")
     url = f"https://www.reddit.com/r/brasil/search.json?q={termo_busca}&limit={limite}"
-    
-    # O "User-Agent" é obrigatório para o Reddit não bloquear a requisição
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    
+
+    headers = {
+        'User-Agent': 'script:analise_textual_nlp:v1.0 (by /u/seu_usuario_aqui)'}
+
     try:
         resposta = requests.get(url, headers=headers)
+        resposta.raise_for_status()
         dados = resposta.json()
-        
+
         textos_coletados = []
-        # Navega na estrutura do JSON para pegar os títulos dos posts
         for post in dados['data']['children']:
             titulo = post['data']['title']
-            # Também podemos pegar o texto do post (selftext)
             corpo = post['data']['selftext']
-            textos_coletados.append(f"{titulo} {corpo}")
-            
+            textos_coletados.append(f"{titulo}. {corpo}")
+
+        print(f"✅ {len(textos_coletados)} posts encontrados.")
         return textos_coletados
     except Exception as e:
-        print(f"Erro na coleta rápida: {e}")
+        print(f"❌ Erro na coleta: {e}")
         return []
 
+
+#6. EXECUÇÃO PRINCIPAL
 if __name__ == "__main__":
-    # 1. Coleta os dados reais
-    comentarios_reais = coletar_dados_sem_api("Elize Matsunaga documentário solta", limite=5)
-    
-    # 2. Roda a sua análise da Etapa 1
-    for texto in comentarios_reais:
-        analisar_comentario(texto)
+    termo = "Elize Matsunaga documentário solta"
+    comentarios_reais = coletar_dados_sem_api(termo, limite=20)
+
+    dados_finais = []
+
+    print("\nProcessando textos com spaCy (limpeza, entidades, adjetivos e substantivos)...")
+
+    # Usamos o enumerate para saber qual é o número do texto atual (índice 'i')
+    for i, texto in enumerate(comentarios_reais):
+        resultado = processar_comentario(texto)
+
+        if resultado:
+            dados_finais.append(resultado)
+
+            
+            if i < 3:
+                print(f"\n{'='*60}")
+                # Imprime apenas os primeiros 150 caracteres para não poluir demais a tela
+                print(f"📝 ORIGINAL:  {resultado['texto_original'][:150]}...")
+                print(f"🧹 LIMPO:     {resultado['texto_limpo'][:150]}...")
+                print(f"🔍 ENTIDADES: {resultado['entidades'] or '(Nenhuma)'}")
+                print(f"✨ ADJETIVOS: {resultado['adjetivos'] or '(Nenhum)'}")
+                print(f"📚 SUBSTANT.: {resultado['substantivos'][:100]}...")
+                print(f"{'='*60}")
+
+    #7. EXPORTAÇÃO
+    if dados_finais:
+        df = pd.DataFrame(dados_finais)
+        nome_arquivo = "dados_reddit_elize.csv"
+
+        df.to_csv(nome_arquivo, index=False, encoding='utf-8')
+        print(
+            f"\n✅ SUCESSO! {len(dados_finais)} registros foram salvos em '{nome_arquivo}'.")
+        print("📊 Seu dataset estruturado está pronto para ser analisado!")
+    else:
+        print("\n⚠️ Nenhum dado foi processado para ser salvo.")
+
 
 
 
