@@ -1,5 +1,5 @@
 # =========================================================
-# PROJETO: Modelagem de Dados Não Estruturados - Etapa 1
+# PROJETO: Modelagem de Dados Não Estruturados - Etapa 2
 # TEMA: Análise do Caso Elize Matsunaga
 #
 # INTEGRANTES DO GRUPO:
@@ -10,20 +10,25 @@
 # PROFESSORA: Adriana Carla Damasceno
 # =========================================================
 
+import html
 import re
 import spacy
 from spacy.language import Language
+import requests
 
 
 # 1. PRÉ-COMPILAÇÃO DE REGEX (OTIMIZAÇÃO DE PERFORMANCE)
 # Compilamos os padrões aqui para não recriá-los a cada frase (muito mais rápido)
 RE_URL = re.compile(r'https?://\S+|www\.\S+')
 # Risadas: kkk, rsrs, hahaha, huahua (independente de maiúsculas)
-RE_RISADAS = re.compile(r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+)\b')
+RE_RISADAS = re.compile(r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+|lol|lmao|lmfao)\b')
 # Pontuação repetida: "!!!!" vira "!"
 RE_PONTUACAO = re.compile(r'([!?,.])\1+')
 # Espaços múltiplos
 RE_ESPACOS = re.compile(r'\s+')
+# Entidades HTML (como &amp;x200B;, &quot;, etc.)
+RE_HTML = re.compile(r'&[a-z0-9#]+;')
+
 
 
 # 2. CARREGAMENTO DO MODELO SPACY
@@ -56,7 +61,11 @@ if not nlp.has_pipe("entity_ruler"):
         {"label": "ORG", "pattern": "Netflix"},
         {"label": "ORG", "pattern": "Uber"},
         {"label": "MISC", "pattern": "True Crime"},
-        {"label": "ORG", "pattern": "justiça_br"},  # Perfil sem o @
+        {"label": "ORG", "pattern": "justiça_br"},
+        {"label": "PER", "pattern": "Suzane"},
+        {"label": "PER", "pattern": "Marcos"},
+        {"label": "PER", "pattern": "Suzane von Richthofen"},
+        {"label": "MISC", "pattern": "Era Uma Vez Um Crime"},
 
         # --- FILTRO (O que deve ser ignorado) ---
         # Palavras comuns que o modelo confunde com nomes próprios
@@ -71,24 +80,27 @@ if not nlp.has_pipe("entity_ruler"):
 # 4. FUNÇÕES DE LIMPEZA E ANÁLISE
 def limpar_texto(texto_bruto):
     """
-    Limpa o texto preservando Emojis (sentimento) e palavras-chave de Hashtags/Menções.
-    Usa regex compilado para alta performance.
+    Limpa o texto preservando Emojis e tratando ruídos de redes sociais.
     """
-    # 1. Remove URLs (Links não têm sentimento)
-    texto = RE_URL.sub('', texto_bruto)
+    # Usamos o módulo html
+    texto = html.unescape(texto_bruto)
+    
+    # 2. Remove resíduos específicos de espaços invisíveis Unicode
+    texto = texto.replace('\u200b', '').replace('#x200B', '')
 
-    # 2. Limpeza de Menções (@) e Hashtags (#)
-    # Removemos apenas os símbolos, mantendo o texto (Ex: #justiça -> justiça)
-    # Isso enriquece a análise de sentimento posterior
+    # 3. Remove URLs usando o regex compilado
+    texto = RE_URL.sub('', texto)
+
+    # 4. Limpeza de Menções (@) e Hashtags (#)
     texto = texto.replace('@', '').replace('#', '')
 
-    # 3. Remove risadas (ruído)
+    # 5. Remove risadas (kkk, lol, etc.)
     texto = RE_RISADAS.sub('', texto)
 
-    # 4. Normaliza pontuação (Ex: "Crime!!!!" -> "Crime!")
+    # 6. Normaliza pontuação (!!!! -> !)
     texto = RE_PONTUACAO.sub(r'\1', texto)
 
-    # 5. Remove espaços extras e quebras de linha
+    # 7. Remove espaços extras e quebras de linha (Finalização)
     texto = RE_ESPACOS.sub(' ', texto).strip()
 
     return texto
@@ -122,21 +134,39 @@ def analisar_comentario(comentario_original):
     print(f"{'='*60}")
 
 
+def coletar_dados_sem_api(termo_busca, limite=5):
+    print(f"\n--- Coletando dados reais (Via JSON Publico) sobre: {termo_busca} ---")
+    
+    # URL de busca do Reddit em formato JSON
+    url = f"https://www.reddit.com/r/brasil/search.json?q={termo_busca}&limit={limite}"
+    
+    # O "User-Agent" é obrigatório para o Reddit não bloquear a requisição
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    try:
+        resposta = requests.get(url, headers=headers)
+        dados = resposta.json()
+        
+        textos_coletados = []
+        # Navega na estrutura do JSON para pegar os títulos dos posts
+        for post in dados['data']['children']:
+            titulo = post['data']['title']
+            # Também podemos pegar o texto do post (selftext)
+            corpo = post['data']['selftext']
+            textos_coletados.append(f"{titulo} {corpo}")
+            
+        return textos_coletados
+    except Exception as e:
+        print(f"Erro na coleta rápida: {e}")
+        return []
 
 if __name__ == "__main__":
-    print("\n:. INICIANDO ANÁLISE DE ENTIDADES - PROJETO ELIZE (FINAL) .:\n")
+    # 1. Coleta os dados reais
+    comentarios_reais = coletar_dados_sem_api("Elize Matsunaga documentário solta", limite=5)
+    
+    # 2. Roda a sua análise da Etapa 1
+    for texto in comentarios_reais:
+        analisar_comentario(texto)
 
-    # Lista de comentários simulados (Futuramente virá da API do Reddit)
-    comentarios_reddit = [
-        "A Elize Matsunaga agora é motorista de app? 😱 Vi no link https://reddit.com/r/crime kkkkkk #elizematsunaga",
-        "Acho um absurdo ela ter saído de Tremembé tão cedo... @justiça_br fiquem de olho!",
-        "O documentário da Netflix sobre a Elize é muito bom, mostra detalhes do crime em SP. rsrsrsrs",
-        "Gente, não dá pra acreditar que ela está solta. #justiça #truecrimebr kkkk",
-        "A empresa Uber deveria banir motoristas com antecedentes criminais graves!!!!!"
-    ]
-
-    # Processamento iterativo
-    for comentario in comentarios_reddit:
-        analisar_comentario(comentario)
 
 
