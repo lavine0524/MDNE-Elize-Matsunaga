@@ -1,49 +1,31 @@
-{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "id": "aeccb99b",
-   "metadata": {},
-   "source": [
-    "### **DIÁRIO DE BORDO: DESAFIOS E SOLUÇÕES**\n",
-    "\n",
-    "**1. Insuficiência do Modelo *Small***\n",
-    "\n",
-    "* **Problema:** O modelo inicial (`pt_core_news_sm`) apresentou baixa precisão em textos curtos de redes sociais.\n",
-    "* **Erro:** Classificou incorretamente o sujeito \"Elize\" como Organização (`ORG`) e verbos no início de frase (ex: \"Acho\") como Pessoas (`PER`).\n",
-    "* **Solução:** Migração para o modelo **`pt_core_news_lg` (Large)**, que possui maior volume de dados e contexto semântico.\n",
-    "\n",
-    "**2. Interferência de Emojis e Sintaxe Informal**\n",
-    "\n",
-    "* **Problema:** O uso informal de emojis funcionou como \"falsa pontuação\", gerando ambiguidades sintáticas.\n",
-    "* **Erro:** O verbo \"Vi\" (posicionado após o emoji 😱) foi classificado erroneamente como entidade `MISC` devido à capitalização.\n",
-    "* **Solução:** Implementação de um **`Entity Ruler` (Régua de Entidades)** no spaCy para:\n",
-    "* **Forçar classificação:** Garantir que \"Elize\" seja sempre `PER` e \"Tremembé\" seja `LOC`.\n",
-    "* **Filtragem (Stopwords):** Criar uma lista de exclusão para ignorar verbos comuns (\"Vi\", \"Acho\") erroneamente detectados.\n",
-    "\n",
-    "**3. Perda de Dados em Menções e Hashtags**\n",
-    "\n",
-    "* **Problema:** A limpeza inicial com Regex removia completamente menções (`@usuario`) e hashtags (`#tema`), descartando entidades valiosas (ex: `@justiça_br`) e palavras-chave de sentimento.\n",
-    "* **Solução:** Refatoração do Regex para remover apenas os símbolos especiais (`@` e `#`), preservando o texto útil. Adicionamos regras manuais para que perfis institucionais (como `justiça_br`) fossem reconhecidos corretamente como Organizações (`ORG`).\n",
-    "\n",
-    "---\n",
-    "\n",
-    "### Resumo do que entra no slide:\n",
-    "\n",
-    "1. **Troca de Modelo** (`sm`  `lg`) por falta de contexto.\n",
-    "2. **Ambiguidades** (\"Vi\"  `MISC`) causadas por emojis/informalidade, resolvidas com filtros.\n",
-    "3. **Preservação de Dados** (Manter texto de `@` e `#`) para enriquecer a análise."
-   ]
-  }
- ],
- "metadata": {
-  "language_info": {
-   "name": "python"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+### **DIÁRIO DE BORDO: DESAFIOS E SOLUÇÕES**
+
+**1. Insuficiência do Modelo *Small***
+
+* **Problema:** O modelo inicial (`pt_core_news_sm`) apresentou baixa precisão em textos curtos de redes sociais.
+* **Erro:** Classificou incorretamente o sujeito "Elize" como Organização (`ORG`) e verbos no início de frase (ex: "Acho") como Pessoas (`PER`).
+* **Solução:** Migração para o modelo **`pt_core_news_lg` (Large)**, que possui maior volume de dados e contexto semântico.
+
+**2. Interferência de Emojis e Sintaxe Informal**
+
+* **Problema:** O uso informal de emojis funcionou como "falsa pontuação", gerando ambiguidades sintáticas.
+* **Erro:** O verbo "Vi" (posicionado após o emoji 😱) foi classificado erroneamente como entidade `MISC` devido à capitalização.
+* **Solução:** Implementação de um **`Entity Ruler` (Régua de Entidades)** no spaCy para:
+* **Forçar classificação:** Garantir que "Elize" seja sempre `PER` e "Tremembé" seja `LOC`.
+* **Filtragem (Stopwords):** Criar uma lista de exclusão para ignorar verbos comuns ("Vi", "Acho") erroneamente detectados.
+
+**3. Perda de Dados em Menções e Hashtags**
+
+* **Problema:** A limpeza inicial com Regex removia completamente menções (`@usuario`) e hashtags (`#tema`), descartando entidades valiosas (ex: `@justiça_br`) e palavras-chave de sentimento.
+* **Solução:** Refatoração do Regex para remover apenas os símbolos especiais (`@` e `#`), preservando o texto útil. Adicionamos regras manuais para que perfis institucionais (como `justiça_br`) fossem reconhecidos corretamente como Organizações (`ORG`).
+
+---
+
+### Resumo do que entra no slide:
+
+1. **Troca de Modelo** (`sm`  `lg`) por falta de contexto.
+2. **Ambiguidades** ("Vi"  `MISC`) causadas por emojis/informalidade, resolvidas com filtros.
+3. **Preservação de Dados** (Manter texto de `@` e `#`) para enriquecer a análise.
 
 # DIÁRIO DE BORDO: ETAPA 2 (COLETA E SANITIZAÇÃO)
 
