@@ -1,5 +1,5 @@
 # =========================================================
-# PROJETO: Modelagem de Dados Não Estruturados - Etapa 2
+# PROJETO: Modelagem de Dados Não Estruturados - Etapa 3
 # TEMA: Análise do Caso Elize Matsunaga
 #
 # INTEGRANTES DO GRUPO:
@@ -15,27 +15,29 @@ import re
 import spacy
 import requests
 import pandas as pd
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+from transformers import pipeline
 
-#PRÉ-COMPILAÇÃO DE REGEX (OTIMIZADO)
+# --- 1. PRÉ-COMPILAÇÃO DE REGEX (LIMPEZA) ---
 RE_URL = re.compile(r'https?://\S+|www\.\S+')
-RE_RISADAS = re.compile(
-    r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+|lol|lmao|lmfao)\b')
+RE_RISADAS = re.compile(r'(?i)\b(k+|r+|s+|(rs)+|(ha)+|(hua)+|lol|lmao|lmfao)\b')
 RE_PONTUACAO = re.compile(r'([!?,.])\1+')
 RE_ESPACOS = re.compile(r'\s+')
 
-#2. CARREGAMENTO DO MODELO SPACY
-print("Carregando modelo de linguagem... (Aguarde)")
+# --- 2. CARREGAMENTO DOS MODELOS ---
+print("Carregando modelos de NLP... (Aguarde)")
 try:
     nlp = spacy.load("pt_core_news_lg")
 except OSError:
-    print("⚠️  AVISO: Modelo 'pt_core_news_lg' não encontrado. Tentando 'sm'...")
-    try:
-        nlp = spacy.load("pt_core_news_sm")
-    except:
-        print("❌ ERRO CRÍTICO: Nenhum modelo spaCy encontrado.")
-        exit()
+    print("Aviso: Baixando modelo sm por segurança...")
+    nlp = spacy.load("pt_core_news_sm")
 
-#3. PERSONALIZAÇÃO (ENTITY RULER)
+# Inicializando a IA de Sentimentos
+sentimento_analyser = pipeline("sentiment-analysis", 
+                               model="nlptown/bert-base-multilingual-uncased-sentiment")
+
+# Configurando o Entity Ruler
 if not nlp.has_pipe("entity_ruler"):
     ruler = nlp.add_pipe("entity_ruler", before="ner")
     padroes = [
@@ -43,19 +45,13 @@ if not nlp.has_pipe("entity_ruler"):
         {"label": "PER", "pattern": "Elize"},
         {"label": "LOC", "pattern": "Tremembé"},
         {"label": "ORG", "pattern": "Netflix"},
-        {"label": "ORG", "pattern": "Uber"},
-        {"label": "MISC", "pattern": "True Crime"},
-        {"label": "ORG", "pattern": "justiça_br"},
-        {"label": "PER", "pattern": "Suzane"},
         {"label": "PER", "pattern": "Marcos"},
-        {"label": "PER", "pattern": "Suzane von Richthofen"},
-        {"label": "MISC", "pattern": "Era Uma Vez Um Crime"},
-        {"label": "IGNORAR", "pattern": [
-            {"LOWER": {"IN": ["vi", "acho", "gente", "olha"]}}]}
+        {"label": "MISC", "pattern": "True Crime"}
     ]
     ruler.add_patterns(padroes)
 
-#4. FUNÇÕES DE LIMPEZA E EXTRAÇÃO (NLP)
+# --- 3. FUNÇÕES DE APOIO (DEFINIÇÕES) ---
+
 def limpar_texto(texto_bruto):
     if not texto_bruto:
         return ""
@@ -68,91 +64,96 @@ def limpar_texto(texto_bruto):
     texto = RE_ESPACOS.sub(' ', texto).strip()
     return texto
 
+def coletar_reddit(termo, limite=25):
+    print(f"\n--- Buscando no Reddit: '{termo}' ---")
+    url = f"https://www.reddit.com/r/brasil/search.json?q={termo}&limit={limite}"
+    headers = {'User-Agent': 'python:projeto_faculdade_nlp:v1.0'}
+    try:
+        resposta = requests.get(url, headers=headers)
+        dados = resposta.json()
+        posts = []
+        for post in dados['data']['children']:
+            titulo = post['data']['title']
+            corpo = post['data']['selftext']
+            posts.append(f"{titulo}. {corpo}")
+        return posts
+    except Exception as e:
+        print(f"❌ Erro na coleta: {e}")
+        return []
 
-def processar_comentario(comentario_original):
+def processar_completo(comentario_original):
     texto_limpo = limpar_texto(comentario_original)
     if not texto_limpo or len(texto_limpo) < 5:
         return None
 
     doc = nlp(texto_limpo)
 
-    entidades = [ent.text for ent in doc.ents if ent.label_ != "IGNORAR"]
-    adjetivos = [token.text.lower() for token in doc if token.pos_ == "ADJ"]
-    substantivos = [token.text.lower()
-                    for token in doc if token.pos_ == "NOUN"]
+    # Requisitos Etapa 3
+    entidades = [ent.text for ent in doc.ents]
+    lemmas = [token.lemma_.lower() for token in doc if not token.is_stop and not token.is_punct]
+    chunks = [chunk.text for chunk in doc.noun_chunks]
+
+    # Sentimento
+    resultado_sent = sentimento_analyser(texto_limpo[:512])[0] 
 
     return {
         "texto_original": comentario_original,
         "texto_limpo": texto_limpo,
         "entidades": ", ".join(entidades),
-        "adjetivos": ", ".join(adjetivos),
-        "substantivos": ", ".join(substantivos)
+        "lemmas": " ".join(lemmas),
+        "noun_chunks": ", ".join(chunks),
+        "score_sentimento": resultado_sent['label']
     }
 
-#5. COLETA DE DADOS VIA JSON
-def coletar_dados_sem_api(termo_busca, limite=15):
-    print(f"\n--- Coletando dados no r/brasil sobre: '{termo_busca}' ---")
-    url = f"https://www.reddit.com/r/brasil/search.json?q={termo_busca}&limit={limite}"
+def gerar_graficos(df):
+    print("\n📊 Criando arquivos de imagem...")
+    
+    # Gráfico de Barras
+    plt.figure(figsize=(10, 6))
+    df['score_sentimento'].value_counts().sort_index().plot(kind='bar', color='skyblue')
+    plt.title('Sentimentos - Caso Elize Matsunaga')
+    plt.ylabel('Quantidade')
+    plt.savefig('grafico_sentimentos.png')
+    plt.close()
 
-    headers = {
-        'User-Agent': 'script:analise_textual_nlp:v1.0 (by /u/seu_usuario_aqui)'}
+    # Nuvem de Palavras
+    textao = " ".join(df['lemmas'].astype(str).tolist())
+    wc = WordCloud(width=800, height=400, background_color='white').generate(textao)
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wc, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig('nuvem_palavras.png')
+    plt.close()
 
-    try:
-        resposta = requests.get(url, headers=headers)
-        resposta.raise_for_status()
-        dados = resposta.json()
+# --- 4. EXECUÇÃO (O START DO CÓDIGO) ---
 
-        textos_coletados = []
-        for post in dados['data']['children']:
-            titulo = post['data']['title']
-            corpo = post['data']['selftext']
-            textos_coletados.append(f"{titulo}. {corpo}")
-
-        print(f"✅ {len(textos_coletados)} posts encontrados.")
-        return textos_coletados
-    except Exception as e:
-        print(f"❌ Erro na coleta: {e}")
-        return []
-
-
-#6. EXECUÇÃO PRINCIPAL
 if __name__ == "__main__":
-    termo = "Elize Matsunaga documentário solta"
-    comentarios_reais = coletar_dados_sem_api(termo, limite=20)
-
+    print("\n🚀 Iniciando Etapa 3!")
+    
+    # 1. Busca os dados
+    lista_posts = coletar_reddit("Elize Matsunaga", limite=25)
+    
     dados_finais = []
 
-    print("\nProcessando textos com spaCy (limpeza, entidades, adjetivos e substantivos)...")
-
-    # Usamos o enumerate para saber qual é o número do texto atual (índice 'i')
-    for i, texto in enumerate(comentarios_reais):
-        resultado = processar_comentario(texto)
-
-        if resultado:
-            dados_finais.append(resultado)
-
-            
-            if i < 3:
-                print(f"\n{'='*60}")
-                # Imprime apenas os primeiros 150 caracteres para não poluir demais a tela
-                print(f"📝 ORIGINAL:  {resultado['texto_original'][:150]}...")
-                print(f"🧹 LIMPO:     {resultado['texto_limpo'][:150]}...")
-                print(f"🔍 ENTIDADES: {resultado['entidades'] or '(Nenhuma)'}")
-                print(f"✨ ADJETIVOS: {resultado['adjetivos'] or '(Nenhum)'}")
-                print(f"📚 SUBSTANT.: {resultado['substantivos'][:100]}...")
-                print(f"{'='*60}")
-
-    #7. EXPORTAÇÃO
-    if dados_finais:
-        df = pd.DataFrame(dados_finais)
-        nome_arquivo = "dados_reddit_elize.csv"
-
-        df.to_csv(nome_arquivo, index=False, encoding='utf-8')
-        print(
-            f"\n✅ SUCESSO! {len(dados_finais)} registros foram salvos em '{nome_arquivo}'.")
-        print("📊 Seu dataset estruturado está pronto para ser analisado!")
+    # 2. Processa os dados
+    if lista_posts:
+        print(f"Analisando {len(lista_posts)} textos...")
+        for p in lista_posts:
+            res = processar_completo(p)
+            if res:
+                dados_finais.append(res)
+        
+        # 3. Gera resultados
+        if dados_finais:
+            df_final = pd.DataFrame(dados_finais)
+            df_final.to_csv("dados_completos_elize.csv", index=False, encoding='utf-8')
+            gerar_graficos(df_final)
+            print("\n✅ TUDO PRONTO!")
+            print("Verifique os arquivos 'grafico_sentimentos.png' e 'nuvem_palavras.png' na sua pasta!")
+        else:
+            print("⚠️ Falha ao processar os textos.")
     else:
-        print("\n⚠️ Nenhum dado foi processado para ser salvo.")
+        print("❌ Nenhum dado coletado do Reddit.")
 
 
 
